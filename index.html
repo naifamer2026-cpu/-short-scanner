@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Short Scanner</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  background: #f5f6f8;
+  color: #111827;
+}
+
+.container {
+  max-width: 1100px;
+  margin: auto;
+  padding: 18px;
+}
+
+.header {
+  background: #111827;
+  color: white;
+  border-radius: 18px;
+  padding: 22px;
+  margin-bottom: 16px;
+}
+
+.header h1 {
+  margin: 0 0 6px;
+  font-size: 25px;
+}
+
+.header p {
+  margin: 0;
+  opacity: .75;
+  font-size: 14px;
+}
+
+.search-box {
+  background: white;
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 2px 10px rgba(0,0,0,.06);
+  margin-bottom: 16px;
+}
+
+label {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+input {
+  width: 100%;
+  padding: 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  font-size: 16px;
+  outline: none;
+}
+
+input:focus {
+  border-color: #111827;
+}
+
+button {
+  width: 100%;
+  margin-top: 10px;
+  padding: 14px;
+  border: 0;
+  border-radius: 12px;
+  background: #111827;
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:active {
+  transform: scale(.99);
+}
+
+.info {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.table-wrap {
+  background: white;
+  border-radius: 18px;
+  overflow-x: auto;
+  box-shadow: 0 2px 10px rgba(0,0,0,.06);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 850px;
+}
+
+th {
+  background: #f3f4f6;
+  padding: 13px 10px;
+  text-align: center;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+td {
+  padding: 14px 10px;
+  border-top: 1px solid #e5e7eb;
+  text-align: center;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.ticker {
+  font-weight: 800;
+}
+
+.empty {
+  padding: 35px 15px;
+  text-align: center;
+  color: #6b7280;
+}
+
+.status {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #f3f4f6;
+  font-size: 13px;
+}
+
+@media (max-width: 600px) {
+  .container {
+    padding: 10px;
+  }
+
+  .header {
+    padding: 18px;
+  }
+
+  .header h1 {
+    font-size: 22px;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <div class="header">
+    <h1>📊 Short Scanner</h1>
+    <p>فحص أسهم Nasdaq والأسهم الأمريكية</p>
+  </div>
+
+  <div class="search-box">
+
+    <label>أدخل الأسهم</label>
+
+    <input
+      id="tickers"
+      type="text"
+      placeholder="مثال: SMX, JXG, KUST, SNGX"
+      autocomplete="off"
+    >
+
+    <button onclick="searchStocks()">
+      🔎 بحث
+    </button>
+
+    <div class="info">
+      افصل بين الأسهم بفاصلة ، مثال: SMX, JXG, KUST
+    </div>
+
+    <div id="status" class="status">
+      أدخل الأسهم واضغط بحث.
+    </div>
+
+  </div>
+
+  <div class="table-wrap">
+
+    <table>
+
+      <thead>
+        <tr>
+          <th>السهم</th>
+          <th>Short Interest</th>
+          <th>Free Float</th>
+          <th>Short / Float</th>
+          <th>السعر</th>
+          <th>ATL</th>
+          <th>آخر Split</th>
+          <th>منذ Split</th>
+        </tr>
+      </thead>
+
+      <tbody id="results">
+
+        <tr>
+          <td colspan="8" class="empty">
+            لا توجد بيانات حتى الآن
+          </td>
+        </tr>
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+</div>
+
+<script>
+
+function searchStocks() {
+
+  const input = document.getElementById("tickers").value.trim();
+  const results = document.getElementById("results");
+  const status = document.getElementById("status");
+
+  if (!input) {
+    status.textContent = "⚠️ اكتب رمز سهم واحد على الأقل.";
+    return;
+  }
+
+  const tickers = input
+    .split(",")
+    .map(x => x.trim().toUpperCase())
+    .filter(x => x.length > 0);
