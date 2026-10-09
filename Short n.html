@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ماسح الشورت للأسهم</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#111c2e;--line:#26354c;--text:#edf3ff;--muted:#9fb0c8;--accent:#65d6a6;--bad:#ff8585}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif;padding:16px}
+main{max-width:1000px;margin:auto}.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;margin:12px 0}
+h1{font-size:23px;margin:4px 0 8px}.note{color:var(--muted);font-size:13px;line-height:1.8}
+label{display:block;margin:12px 0 6px;font-size:14px}
+input{width:100%;background:#08101d;border:1px solid #354760;color:white;border-radius:10px;padding:13px;font-size:16px;direction:ltr;text-align:left}
+button{border:0;border-radius:10px;background:var(--accent);color:#062015;font-weight:700;padding:13px 18px;font-size:16px;margin-top:10px;width:100%}
+#status{margin-top:12px;line-height:1.7;font-size:14px;overflow-wrap:anywhere}.good{color:var(--accent)}.bad{color:var(--bad)}
+.tablewrap{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:700px}th,td{padding:12px 10px;border-bottom:1px solid var(--line);text-align:center;white-space:nowrap}th{color:#b9c9df;font-size:13px}td{font-size:14px}td:first-child{font-weight:700;direction:ltr}
+.small{font-size:12px;color:var(--muted);line-height:1.8;margin-top:12px}
+</style>
+</head>
+<body>
+<main>
+  <section class="panel">
+    <h1>ماسح الشورت للأسهم الأمريكية</h1>
+    <div class="note">أدخل رموز الأسهم مفصولة بفواصل، مثل: SMX, GME, TSLA. اضغط تحديث لجلب البيانات.</div>
+    <label for="symbols">رموز الأسهم (Ticker)</label>
+    <input id="symbols" value="SMX" autocomplete="off" autocapitalize="characters" placeholder="SMX, GME, TSLA">
+    <button id="run">تحديث البيانات</button>
+    <div id="status" role="status">جاهز للتحديث.</div>
+  </section>
+  <section class="panel">
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>السهم</th><th>السعر الحالي</th><th>كمية الشورت</th><th>الأيام منذ التقسيم</th><th>القاع التاريخي</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="5">أدخل الرموز واضغط تحديث.</td></tr></tbody>
+      </table>
+    </div>
+    <div class="small">
+      تنبيه: بيانات كمية الشورت الرسمية تُنشر عادةً مرتين شهريًا وليست لحظية. السعر والقاع يعتمدان على بيانات Yahoo Finance المتاحة؛ وقد تمنع بعض الشبكات أو المصادر جلب البيانات من المتصفح. إذا ظهر خطأ، لن يعرض الموقع رقمًا وهميًا.
+    </div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const fmt = n => Number.isFinite(Number(n)) ? Number(n).toLocaleString('en-US',{maximumFractionDigits:4}) : '—';
+const fmtInt = n => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString('en-US') : '—';
+const pick = (obj, keys) => {
+  if (!obj || typeof obj !== 'object') return undefined;
+  const entries = Object.entries(obj);
+  for (const key of keys) {
+    const found = entries.find(([k,v]) => k.toLowerCase().replace(/[^a-z]/g,'').includes(key) && v !== null && v !== undefined);
+    if (found) return found[1];
+  }
+  return undefined;
+};
+async function getShort(symbol) {
+  const url = `https://xoomar.com/api/markets/short-interest?symbol=${encodeURIComponent(symbol)}`;
+  const res = await fetch(url, {headers:{'Accept':'application/json'}});
+  if (!res.ok) throw new Error('مصدر الشورت أعاد HTTP ' + res.status);
+  const json = await res.json();
+  let arr = Array.isArray(json) ? json : (Array.isArray(json.data) ? json.data : (Array.isArray(json.results) ? json.results : []));
+  if (!arr.length && json.data && typeof json.data === 'object') arr = [json.data];
+  if (!arr.length) return {value:null, note:'لا توجد بيانات شورت'};
+  arr.sort((a,b)=>String(pick(b,['settlementdate','reportdate','date','timestamp'])||'').localeCompare(String(pick(a,['settlementdate','reportdate','date','timestamp'])||'')));
+  const row = arr[0] || arr[arr.length-1];
+  const val = pick(row,['shortinterestshares','shortinterest','shortshares','shares short','quantity']);
+  const num = typeof val === 'string' ? Number(val.replace(/[$, ]/g,'')) : Number(val);
+  return {value:Number.isFinite(num)?num:null, note:Number.isFinite(num)?'':'لم أتعرف على حقل كمية الشورت في رد المصدر'};
+}
+async function getMarket(symbol) {
+  const now = Math.floor(Date.now()/1000);
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=0&period2=${now}&interval=1d&events=div%2Csplit`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('مصدر السعر أعاد HTTP ' + res.status);
+  const json = await res.json();
+  const result = json?.chart?.result?.[0];
+  if (!result) throw new Error('لا توجد بيانات سعر لهذا الرمز');
+  const lows = result.indicators?.quote?.[0]?.low || [];
+  const validLows = lows.map(Number).filter(n=>Number.isFinite(n)&&n>0);
+  const current = Number(result.meta?.regularMarketPrice);
+  const splits = result.events?.splits ? Object.values(result.events.splits) : [];
+  const latestSplit = splits.map(s=>Number(s.date)).filter(n=>Number.isFinite(n)&&n>0).sort((a,b)=>b-a)[0];
+  const days = latestSplit ? Math.floor((now-latestSplit)/86400) : null;
+  return {price:Number.isFinite(current)?current:null, atl:validLows.length?Math.min(...validLows):null, days};
+}
+function cell(value){const td=document.createElement('td');td.textContent=value;return td;}
+async function run() {
+  const symbols = [...new Set($('symbols').value.split(/[,\s]+/).map(s=>s.trim().toUpperCase()).filter(s=>/^[A-Z][A-Z0-9.^-]{0,14}$/.test(s)))];
+  const body=$('rows'); body.replaceChildren();
+  if(!symbols.length){body.innerHTML='<tr><td colspan="5">أدخل رمز سهم صحيحًا.</td></tr>';return;}
+  if(symbols.length>4){$('status').textContent='للحفاظ على حد المصدر المجاني، حدّث 4 أسهم كحد أقصى في المرة الواحدة.';$('status').className='bad';return;}
+  $('run').disabled=true;$('run').textContent='جارٍ جلب البيانات…';$('status').className='';$('status').textContent='جارٍ الاتصال بمصادر البيانات…';
+  let ok=0;
+  for(const symbol of symbols){
+    const tr=document.createElement('tr');tr.appendChild(cell(symbol));
+    const priceCell=cell('جارٍ…'), shortCell=cell('جارٍ…'), splitCell=cell('جارٍ…'), atlCell=cell('جارٍ…');
+    tr.append(priceCell,shortCell,splitCell,atlCell);body.appendChild(tr);
+    const results=await Promise.allSettled([getMarket(symbol),getShort(symbol)]);
+    const market=results[0].status==='fulfilled'?results[0].value:null;
+    const short=results[1].status==='fulfilled'?results[1].value:null;
+    priceCell.textContent=market&&market.price!==null?'$'+fmt(market.price):(results[0].reason?.message||'تعذر جلب السعر');
+    atlCell.textContent=market&&market.atl!==null?'$'+fmt(market.atl):(results[0].reason?.message||'تعذر جلب القاع');
+    splitCell.textContent=market?(market.days===null?'لا يوجد تقسيم مسجل':fmtInt(market.days)):(results[0].reason?.message||'تعذر جلب التقسيم');
+    shortCell.textContent=short&&short.value!==null?fmtInt(short.value):(short?.note||results[1].reason?.message||'تعذر جلب الشورت');
+    if(market||short)ok++;
+  }
+  $('status').textContent=`انتهى التحديث. تمت قراءة بيانات جزئية أو كاملة لـ ${ok} من ${symbols.length} سهم/أسهم. إذا ظهرت رسالة تعذر الجلب، فالمصدر أو اتصال المتصفح لم يسمح بالوصول.`;
+  $('status').className=ok?'good':'bad';$('run').disabled=false;$('run').textContent='تحديث البيانات';
+}
+$('run').addEventListener('click',run);
+</script>
+</body>
+</html>
